@@ -20,7 +20,7 @@ import java.util.*
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState) // ✅ Ensure this calls super correctly
+        super.onCreate(savedInstanceState)
         setContent {
             VoiceSenderApp()
         }
@@ -29,12 +29,21 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun VoiceSenderApp() {
-    var recognizedText by remember { mutableStateOf("Press the button and speak...") }
+    var receiverEmail by remember { mutableStateOf("Press button to speak email...") }
+    var subject by remember { mutableStateOf("Press button to speak subject...") }
+    var body by remember { mutableStateOf("Press button to speak message...") }
+    var inputType by remember { mutableStateOf("email") } // Tracks which input is being spoken
+
     val speechLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val data = result.data
         if (result.resultCode == Activity.RESULT_OK && data != null) {
-            val resultText = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.get(0) ?: ""
-            recognizedText = resultText
+            val spokenText = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.get(0) ?: ""
+
+            when (inputType) {
+                "email" -> receiverEmail = validateEmail(spokenText)
+                "subject" -> subject = spokenText
+                "body" -> body = spokenText
+            }
         }
     }
 
@@ -43,15 +52,31 @@ fun VoiceSenderApp() {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Text(text = recognizedText, style = MaterialTheme.typography.bodyLarge)
-        Spacer(modifier = Modifier.height(20.dp))
-        Button(onClick = { startVoiceRecognition(speechLauncher) }) {
-            Text(text = "Start Voice Input")
+        Text(text = "Receiver Email: $receiverEmail", style = MaterialTheme.typography.bodyLarge)
+        Spacer(modifier = Modifier.height(10.dp))
+        Button(onClick = { inputType = "email"; startVoiceRecognition(speechLauncher) }) {
+            Text(text = "Speak Receiver Email")
         }
+
+        Spacer(modifier = Modifier.height(20.dp))
+        Text(text = "Subject: $subject", style = MaterialTheme.typography.bodyLarge)
+        Spacer(modifier = Modifier.height(10.dp))
+        Button(onClick = { inputType = "subject"; startVoiceRecognition(speechLauncher) }) {
+            Text(text = "Speak Subject")
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+        Text(text = "Body: $body", style = MaterialTheme.typography.bodyLarge)
+        Spacer(modifier = Modifier.height(10.dp))
+        Button(onClick = { inputType = "body"; startVoiceRecognition(speechLauncher) }) {
+            Text(text = "Speak Message Body")
+        }
+
         Spacer(modifier = Modifier.height(20.dp))
         Button(
-            onClick = { sendToServer(recognizedText) },
-            enabled = recognizedText.isNotBlank() && recognizedText != "Press the button and speak..."
+            onClick = { sendToServer(receiverEmail, subject, body) },
+            enabled = receiverEmail.isNotBlank() && subject.isNotBlank() && body.isNotBlank()
+                    && receiverEmail.contains("@")
         ) {
             Text(text = "Send to Server")
         }
@@ -67,11 +92,30 @@ private fun startVoiceRecognition(launcher: androidx.activity.result.ActivityRes
     launcher.launch(intent)
 }
 
-private fun sendToServer(text: String) {
+// Function to validate spoken email and format it correctly
+private fun validateEmail(spokenText: String): String {
+    return spokenText.lowercase(Locale.getDefault()) // Convert to lowercase for better accuracy
+        .replace(" at ", "@")
+        .replace(" dot ", ".")
+        .replace(" underscore ", "_")
+        .replace(" dash ", "-")
+        .replace(" space ", "")
+        .replace(" ", "") // Remove any remaining spaces
+        .trim() // Ensure no leading or trailing spaces
+}
+
+// Function to send email data to Flask server
+private fun sendToServer(email: String, subject: String, body: String) {
     val client = OkHttpClient()
-    val requestBody = FormBody.Builder().add("text", text).build()
+    val finalemail=validateEmail(email)
+    val requestBody = FormBody.Builder()
+        .add("email", finalemail)
+        .add("subject", subject)
+        .add("body", body)
+        .build()
+
     val request = Request.Builder()
-        .url("http://192.168.157.85:5000/receive_text") // ✅ Replace with your actual Flask server URL
+        .url("http://192.168.157.85:5000/sendmail")
         .post(requestBody)
         .build()
 
