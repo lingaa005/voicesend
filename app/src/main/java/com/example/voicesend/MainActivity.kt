@@ -1,5 +1,5 @@
 package com.example.voicesend
-
+// all done by lingaa
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
